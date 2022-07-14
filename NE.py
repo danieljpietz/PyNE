@@ -1,6 +1,4 @@
 import numpy as np
-from copy import deepcopy
-
 from functions import *
 
 
@@ -9,7 +7,7 @@ class _Link(object):
         self.mass = mass
         self.COM = COM
         self.inertia = inertia
-        self.first_mass_moment_skew = skew(mass*self.COM)
+        self.first_mass_moment_skew = skew(mass * self.COM)
         self.mass_ident = np.diag(3 * [mass])
         self.children = []
         self.forces = []
@@ -20,7 +18,6 @@ class _Link(object):
     def add_force(self, force):
         force.link = self
         self.forces.append(force)
-
 
     def update(self):
         self.kinematics()
@@ -58,20 +55,30 @@ class _Link(object):
         self.d = jtm @ dot_jacob_dot_x_product + self.Jacobian.transpose() @ dPrime
 
         F = np.zeros((6, 1))
+        fJoint = np.zeros((len(self.d), 1))
 
         for f in self.forces:
-            pos, vec = f.get()
-            F += np.block([[skew(pos)@self.rotation_global.transpose() @ vec],
-                          [self.mass * vec]])
+            if isinstance(f, JointForce):
+                fJoint += f.get()
+            else:
+                pos, vec = f.get()
+                F += np.block([[skew(pos) @ self.rotation_global.transpose() @ vec],
+                               [self.mass * vec]])
 
-        self.F = self.Jacobian.transpose() @ F
-
-
+        self.F = self.Jacobian.transpose() @ F + fJoint
 
 
 class Root(_Link):
     def __init__(self, mass, COM, inertia):
         super(Root, self).__init__(mass, COM, inertia)
+
+    def __init_subclass__(cls, **kwargs):
+        cls.___init___ = cls.__init__
+
+        def __init_wrapper__(self):
+            pass
+
+        cls.__init__ = __init_wrapper__
 
     def kinematics(self):
         self.x = np.reshape(self.x, (len(self.x), 1))
@@ -80,6 +87,16 @@ class Root(_Link):
         self.omega_global = temp[0:3]
         self.omega_global_skewed = skew(self.omega_global)
         self.velocity = temp[4:6]
+
+    def eval(self, x, xdot):
+        self.x = x
+        self.xdot = xdot
+        self.___init___(x, xdot)
+        self.update()
+        return np.linalg.solve(self.H, self.F - self.d)
+
+    def __call__(self, x, xdot):
+        return self.eval(x, xdot)
 
 
 class Link(_Link):
@@ -137,8 +154,8 @@ class Link(_Link):
                 [
                     -self.parent.rotation_global
                     @ (
-                        self.parent.omega_global_skewed @ self.position_local_skewed
-                        + self.velocity_local_skewed
+                            self.parent.omega_global_skewed @ self.position_local_skewed
+                            + self.velocity_local_skewed
                     ),
                     np.zeros((3, 3)),
                 ],
@@ -146,22 +163,27 @@ class Link(_Link):
         )
 
         self.JacobianDot = (
-            self.JacobianStar @ self.parent.Jacobian
-            + self.JacobianPrime @ self.parent.JacobianDot
-            + np.block(
+                self.JacobianStar @ self.parent.Jacobian
+                + self.JacobianPrime @ self.parent.JacobianDot
+                + np.block(
+            [
+                [np.zeros((3, self.dof))],
                 [
-                    [np.zeros((3, self.dof))],
-                    [
-                        self.parent.rotation_global
-                        @ self.omega_local_skewed
-                        @ self.ITilde
-                    ],
-                ]
-            )
+                    self.parent.rotation_global
+                    @ self.omega_local_skewed
+                    @ self.ITilde
+                ],
+            ]
+        )
         )
 
 
 class Force(object):
+    def __init__(self):
+        pass
+
+
+class JointForce(Force):
     def __init__(self):
         pass
 
@@ -174,3 +196,12 @@ class Gravity(Force):
     def get(self):
         return self.link.COM, self.vector * self.link.mass
 
+
+class CoulombicFriction(JointForce):
+
+    def __init__(self, coefficient):
+        self.link = None
+        self.coefficient = coefficient
+
+    def get(self):
+        return -self.coefficient * (self.link.IHat + self.link.ITilde) @ self.link.xdot

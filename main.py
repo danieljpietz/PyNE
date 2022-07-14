@@ -1,13 +1,11 @@
 from NE import *
 
+
 class System(Root):
     def __init__(self, x, xdot):
         super(System, self).__init__(
             mass=1, COM=np.array([[0], [0], [0]]), inertia=np.eye(3)
         )
-
-        self.x = x
-        self.xdot = xdot
 
         self.position = np.array([[0], [x[0]], [0]])
         self.rotation_global = np.eye(3)
@@ -39,9 +37,9 @@ class System(Root):
         self.link1.add_force(Gravity(np.array([[0], [0], [-1]])))
         self.link2.add_force(Gravity(np.array([[0], [0], [-1]])))
 
+        self.link1.add_force(CoulombicFriction(1))
 
-s = System(np.array([0, 1, 1]), np.array([0, 1, 1]))
 
-s.update()
-
-print(s)
+s = System()
+x = s(np.array([0, 1, 1]), np.array([0, 1, 1]))
+print(x)

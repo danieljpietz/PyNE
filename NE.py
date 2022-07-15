@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from functions import *
 
 
@@ -24,9 +25,9 @@ class _Link(object):
         self.dynamics()
         for child in self.children:
             child.update()
-            self.H += child.H
-            self.d += child.d
-            self.F += child.F
+            self.H += child.H.astype(float)
+            self.d += child.d.astype(float)
+            self.F += child.F.astype(float)
 
     def dynamics(self):
         m_corner_elem = self.first_mass_moment_skew @ self.rotation_global.transpose()
@@ -63,7 +64,7 @@ class _Link(object):
             else:
                 pos, vec = f.get()
                 F += np.block([[skew(pos) @ self.rotation_global.transpose() @ vec],
-                               [self.mass * vec]])
+                               [self.mass * vec]]).astype(float)
 
         self.F = self.Jacobian.transpose() @ F + fJoint
 
@@ -89,8 +90,8 @@ class Root(_Link):
         self.velocity = temp[4:6]
 
     def eval(self, x, xdot):
-        self.x = x
-        self.xdot = xdot
+        self.x = np.reshape(x, (len(x), 1)).astype(float)
+        self.xdot = np.reshape(xdot, (len(x), 1)).astype(float)
         self.___init___(x, xdot)
         self.update()
         return np.linalg.solve(self.H, self.F - self.d)
@@ -118,7 +119,7 @@ class Link(_Link):
         # precomputing these values
         #
 
-        self.rotation_global = self.parent.rotation_global @ self.rotation
+        self.rotation_global = (self.parent.rotation_global @ self.rotation)
 
         self.omega_local = self.IHat @ self.xdot
         self.omega_global = self.parent.omega_global + self.rotation @ self.omega_local
@@ -136,7 +137,7 @@ class Link(_Link):
                 [self.rotation_local_transpose, np.zeros((3, 3))],
                 [
                     self.parent.rotation_global @ self.position_local_skewed.transpose(),
-                    np.eye((3)),
+                    np.eye(3),
                 ],
             ]
         )
@@ -197,7 +198,11 @@ class Gravity(Force):
         return self.link.COM, self.vector * self.link.mass
 
 
-class CoulombicFriction(JointForce):
+class Friction(JointForce):
+    pass
+
+
+class ViscousFriction(Friction):
 
     def __init__(self, coefficient):
         self.link = None
@@ -205,3 +210,58 @@ class CoulombicFriction(JointForce):
 
     def get(self):
         return -self.coefficient * (self.link.IHat + self.link.ITilde) @ self.link.xdot
+
+
+class Solver(object):
+
+    class Solution(object):
+        def __init__(self, x, xdot):
+            self.x = x
+            self.xdot = xdot
+
+        def df(self):
+            pass
+
+    def __init__(self, system):
+        self.system = system
+        self.tX = []
+        self.tXDot = []
+
+    def solve(self, x0, dx0, tRange, tStep):
+        timestamp = np.arange(*tRange, tStep)
+        self.tX = np.zeros((len(timestamp), len(x0)))
+        self.tXDot = self.tX
+        self.tX[0] = x0
+        self.tXDot[0] = dx0
+        for i, t in enumerate(timestamp[1:]):
+            (self.tX[i + 1], self.tXDot[i + 1]) = (x.flatten().astype(float) for x in self.step(tStep, self.tX[i], self.tXDot[i]))
+
+        return self.Solution(self.tX, self.tXDot)
+
+    def step(self):
+        raise
+
+    pass
+
+
+
+
+class RungeKutta(Solver):
+
+    def __init__(self, system):
+        super(RungeKutta, self).__init__(system)
+
+    def step(self, h, x=None, xdot=None):
+        if x is None and xdot is None:
+            (x, xdot) = (self.system.x, self.system.xdot)
+        x = np.reshape(x, (len(x), 1)).astype(float)
+        xdot = np.reshape(xdot, (len(x), 1)).astype(float)
+        k1 = self.system.eval(x, xdot)
+        k2 = self.system.eval(x + h*(xdot / 2), xdot + h*(k1/2))
+        k3 = self.system.eval(x + h * (xdot / 2), xdot + h * (k2 / 2))
+        k4 = self.system.eval(x + h*xdot, xdot + h*k3)
+        dxdot = (h / 6) * (k1 + 2*(k2 + k3) + k4)
+
+        return (x + xdot, xdot + dxdot)
+
+    pass

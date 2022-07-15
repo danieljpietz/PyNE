@@ -37,9 +37,9 @@ class System(Root):
         self.link1.add_force(Gravity(np.array([[0], [0], [-1]])))
         self.link2.add_force(Gravity(np.array([[0], [0], [-1]])))
 
-        self.link1.add_force(CoulombicFriction(1))
+        self.link1.add_force(ViscousFriction(1))
+        self.link2.add_force(ViscousFriction(1))
 
 
-s = System()
-x = s(np.array([0, 1, 1]), np.array([0, 1, 1]))
-print(x)
+x = RungeKutta(System()).solve([0, 0, 0], [0, 0, 0], (0, 10), 0.01).df()
+

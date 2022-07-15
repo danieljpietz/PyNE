@@ -2,6 +2,7 @@ import numpy as np
 
 
 def rotx(theta, lib=np):
+    theta = theta.squeeze()
     return np.array(
         [
             [1, 0, 0],
@@ -12,6 +13,7 @@ def rotx(theta, lib=np):
 
 
 def roty(theta, lib=np):
+    theta = theta.squeeze()
     return np.array(
         [
             [lib.cos(theta), 0, lib.sin(theta)],
@@ -22,6 +24,7 @@ def roty(theta, lib=np):
 
 
 def rotz(theta, lib=np):
+    theta = theta.squeeze()
     return np.array(
         [
             [lib.cos(theta), -lib.sin(theta), 0],

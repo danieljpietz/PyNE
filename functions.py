@@ -35,15 +35,17 @@ def rotz(theta, lib=np):
 
 
 def skew(v):
-    v = v.squeeze()
+    v = np.reshape(v, (3)).astype(float)
     return np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
 
 
 def skew3(m):
-    return np.array([skew(v) for v in m.transpose()])
+    return np.array([skew(v.squeeze()) for v in m.transpose()])
 
 
 def sparse(size, coordinate):
     zero = np.zeros(size)
     zero[coordinate[0]][coordinate[1]] = 1
     return zero
+
+

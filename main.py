@@ -1,45 +1,49 @@
+import numpy as np
 from NE import *
 
 
-class System(Root):
+class MySystem(NESystem):
     def __init__(self, x, xdot):
-        super(System, self).__init__(
-            mass=1, COM=np.array([[0], [0], [0]]), inertia=np.eye(3)
+        super(MySystem, self).__init__()
+        self.link0 = Link(
+            parent=self,
+            position=[0, x[0], 0],
+            rotation=np.eye(3),
+            mass=1,
+            COM=[0, 1, 0],
+            inertia=np.eye(3),
+            PMap=sparse((3, 3), (0, 0))
         )
 
-        self.position = np.array([[0], [x[0]], [0]])
-        self.rotation_global = np.eye(3)
-        self.Jacobian = sparse((6, len(x)), (4, 0))
-        self.JacobianDot = np.zeros((6, len(x)))
-
-        self.link1 = Link(
+        self.link1 = Link (
             parent=self,
+            position = [0, 0, 0],
+            rotation = rotx(x[1]),
             mass=1,
-            COM=np.array([[0], [1], [0]]),
+            COM=[0, 1, 0],
             inertia=np.eye(3),
-            rotation=rotx(x[1]),
-            position=np.array([[0], [1], [0]]),
-            IHat=sparse((3, len(x)), (0, 1)),
-            ITilde=np.zeros((3, len(x))),
+            RMap=sparse((3, 3), (0, 1))
         )
 
         self.link2 = Link(
             parent=self.link1,
-            mass=1,
-            COM=np.array([[0], [1], [0]]),
-            inertia=np.eye(3),
+            position=[0, 1, 0],
             rotation=rotx(x[2]),
-            position=np.array([[0], [1], [0]]),
-            IHat=sparse((3, len(x)), (0, 2)),
-            ITilde=np.zeros((3, len(x))),
+            mass=1,
+            COM=[0, 1, 0],
+            inertia=np.eye(3),
+            RMap=sparse((3, 3), (0, 2))
         )
 
-        self.link1.add_force(Gravity(np.array([[0], [0], [-1]])))
-        self.link2.add_force(Gravity(np.array([[0], [0], [-1]])))
+        self.link1.add_force(Gravity([0, 0, -9.81]))
+        self.link2.add_force(Gravity([0, 0, -9.81]))
 
+        self.link0.add_force(ViscousFriction(1))
         self.link1.add_force(ViscousFriction(1))
         self.link2.add_force(ViscousFriction(1))
 
 
-x = RungeKutta(System()).solve([0, 0, 0], [0, 0, 0], (0, 10), 0.01).df()
+results = RungeKutta(MySystem()).dsolve([0,0,0], [0, 0 ,0], (0, 20)).df()
 
+results.plot(x='time', y=['x0', 'x1', 'x2'])
+plt.show()

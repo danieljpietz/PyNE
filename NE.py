@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 from functions import *
 import matplotlib.pyplot as plt
@@ -21,7 +22,7 @@ class _Link(object):
         force.add_link(self)
         self.forces.append(force)
 
-    def update(self, CBF=False):
+    def update(self, CBF):
         self.kinematics()
 
         self.H = np.zeros((self.dof, self.dof))
@@ -166,6 +167,7 @@ class NESystem(_Link):
         self.d_omega_global = np.zeros((3, self.dof))
         self.d_skew_omega_global = skew3(self.d_omega_global)
         self.skew_omega_global = skew(np.zeros(3))
+        self.has_CBF = not type(self).barrier is NESystem.barrier
 
     def __init_subclass__(cls, **kwargs):
         cls.___init___ = cls.__init__
@@ -174,6 +176,18 @@ class NESystem(_Link):
             pass
 
         cls.__init__ = __init_wrapper__
+
+    def barrier(self, x, xdot):
+        pass
+
+    def G_barrier(self, x, xdot):
+        pass
+
+    def H_barrier(self, x, xdot):
+        pass
+
+    def d_barrier(self, x, xdot):
+        pass
 
     def kinematics(self):
         self.x = np.reshape(self.x, (len(self.x), 1))
@@ -187,8 +201,23 @@ class NESystem(_Link):
         self.x = np.reshape(x, (len(x), 1)).astype(float)
         self.xdot = np.reshape(xdot, (len(x), 1)).astype(float)
         self.___init___(x, xdot)
-        self.update()
-        return np.concatenate([xdot, np.linalg.solve(self.H, self.F - self.d)])
+        self.update(self.has_CBF)
+        self.xddot = np.concatenate([xdot, np.linalg.solve(self.H, self.F - self.d)])
+
+        if self.has_CBF:
+            self.CBF_eval(np.array([[1, 2, 3]]).transpose())
+
+        return self.xddot
+
+
+    def CBF_eval(self, u):
+        self.d_xddot = np.linalg.solve(self.H, np.concatenate(
+            [np.zeros((self.dof, self.dof, 1)), self.d_H @ self.xddot[self.dof:]]) + self.d_d).reshape(
+            (self.dof, 2 * self.dof))
+        self.J_f = np.block([[np.zeros((self.dof, self.dof)), np.eye(self.dof)], [self.d_xddot]])
+        temp = (self.H_barrier(self.x, self.xdot) @ self.xddot + self.J_f @ self.G_barrier(self.x, self.xdot))
+        g = np.concatenate([np.block(np.zeros((self.dof, self.dof))), np.linalg.solve(self.H, self.input_map)])
+        return (temp.transpose() @ (self.xddot + g @ np.reshape(u, (g.shape[1], 1)))  + self.coeff1 * self.barrier(self.x, self.xdot) + self.coeff2 * self.d_barrier(self.x, self.xdot, self.xddot)).squeeze()
 
     def __call__(self, x, xdot):
         return self.eval(x, xdot)
@@ -233,6 +262,7 @@ class Link(_Link):
             self.F += child.F.astype(float)
 
     def kinematics(self):
+
         #
         # We are going to use a lot of skewed vectors and transposed matrices. We can save a little bit of time by
         # precomputing these values

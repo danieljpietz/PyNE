@@ -1,2 +1,0 @@
-recursive-include src/pyhdl2/VHDL *
-recursive-include src/pyhdl2/beautifier *

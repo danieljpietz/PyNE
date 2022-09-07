@@ -1,14 +1,11 @@
 import pytest
 
 
-def test_double_pendulum():
-    from pycbf2 import NESystem, Link, LinkType
-    from pycbf2.force import JointForce, Friction, Gravity, jointforce
+def test_cbf():
+    import pycbf2.func
     import numpy as np
-    from pycbf2.PyCBF import simulate
-
-    GOAL = [np.pi / 2, 0]
-    SUCCESS_THRESHOLD = 0.01
+    from pycbf2.type import NESystem, Link, LinkType
+    from pycbf2.force import Gravity, Friction
 
     class MySystem(NESystem):
         def __init__(self):
@@ -41,25 +38,12 @@ def test_double_pendulum():
             for link in self.links():
                 link.add_force(Gravity([0, 0, -9.81]), Friction(0.5))
 
-            self.link1.add_force(PID(GOAL[0]))
-            self.link2.add_force(PID(GOAL[1]))
-
-    class PID(JointForce):
-        def __init__(self, target):
-            super(PID, self).__init__(self.PID_Callback_Factory(target))
-
-        @staticmethod
-        def PID_Callback_Factory(goal):
-            @jointforce
-            def pid(link):
-                return 50 * (goal - link.x) - link.xdot
-
-            return pid
-
     s = MySystem().compile()
 
-    df = simulate(s, [0, 0], [0, 0], 0.1, (0, 94))
+    from pycbf2.CBFAlgorithm import differential_kinematics, differential_dynamics
+    from pycbf2.NEAlgorithm import recursive_kinematics
 
-    error = df.iloc[-1].drop("t") - [GOAL[0], GOAL[1], 0, 0]
+    links = s[1]
+    l2 = links[1].properties
 
-    assert np.linalg.norm(error) < SUCCESS_THRESHOLD
+    differential_dynamics(l2, np.zeros(2))

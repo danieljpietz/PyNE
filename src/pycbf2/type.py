@@ -3,8 +3,7 @@ import numba as nb
 import numpy as np
 import enum
 from typing import Union
-from copy import copy
-
+from .func import skew, skew3
 
 _nbLinkSpec = (
     ("link_type", nb.int64),
@@ -22,8 +21,10 @@ _nbLinkSpec = (
     ("rotation_local", nb.float64[:, :]),
     ("rotation_offset", nb.float64[:, :]),
     ("rotation_global", nb.float64[:, :]),
-    ("angular_velocity", nb.float64[:]),
+    ("angular_velocity_local", nb.float64[:]),
+    ("angular_velocity_global", nb.float64[:]),
     ("position", nb.float64[:]),
+    ("position_local_skewed", nb.float64[:, :]),
     ("linear_velocity", nb.float64[:]),
     ("jacobian", nb.float64[:, :]),
     ("JNPrime", nb.float64[:, :]),
@@ -33,6 +34,18 @@ _nbLinkSpec = (
     ("M", nb.float64[:, :]),
     ("d", nb.float64[:]),
     ("F", nb.float64[:]),
+    ("d_rotation_local", nb.float64[:, :, :]),
+    ("d_skew_position_local", nb.float64[:, :, :]),
+    ("d_rotation_global", nb.float64[:, :, :]),
+    ("d_angular_velocity_global", nb.float64[:, :]),
+    ("d_angular_velocity_global_skewed", nb.float64[:, :, :]),
+    ("d_jacobian", nb.float64[:, :, :]),
+    ("d_JNPrime", nb.float64[:, :, :]),
+    ("d_dotJNPrime", nb.float64[:, :, :]),
+    ("d_dotJacobian", nb.float64[:, :, :]),
+    ("d_H", nb.float64[:, :, :]),
+    ("d_M", nb.float64[:, :, :]),
+    ("d_d", nb.float64[:, :]),
 )
 
 
@@ -67,18 +80,41 @@ class _nbLink:
         self.rotation_local = rotation_local
         self.rotation_offset = rotation_local
         self.rotation_global = np.eye(3)
-        self.angular_velocity = np.zeros(3)
+        self.angular_velocity_local = np.zeros(3)
+        self.angular_velocity_global = np.zeros(3)
         self.position = position
+        self.position_local_skewed = skew(position)
         self.linear_velocity = np.zeros(3)
         self.jacobian = np.zeros((6, self.dof))
-        self.JNPrime = np.zeros((6, self.dof))
-        self.dotJNPrime = np.zeros((6, self.dof))
+        self.JNPrime = np.zeros((6, 6))
+        self.dotJNPrime = np.zeros((6, 6))
         self.dotJacobian = np.zeros((6, self.dof))
 
         self.H = np.zeros((self.dof, self.dof))
         self.M = np.zeros((6, 6))
         self.d = np.zeros(self.dof)
         self.F = np.zeros(self.dof)
+
+        """
+            DIFFERENTIAL PROPERITES 
+        """
+
+        self.d_skew_position_local = skew3(self.ITilde)
+
+        self.d_rotation_local = np.zeros((self.dof, 3, 3))
+        self.d_rotation_global = np.zeros((self.dof, 3, 3))
+
+        self.d_angular_velocity_global = np.zeros((3, 2 * self.dof))
+        self.d_angular_velocity_global_skewed = np.zeros((2 * self.dof, 3, 3))
+
+        self.d_jacobian = np.zeros((self.dof, 6, self.dof))
+        self.d_JNPrime = np.zeros((self.dof, 6, self.dof))
+        self.d_dotJNPrime = np.zeros((2 * self.dof, 6, self.dof))
+        self.d_dotJacobian = np.zeros((2 * self.dof, 6, self.dof))
+
+        self.d_H = np.zeros((self.dof, self.dof, self.dof))
+        self.d_M = np.zeros((self.dof, 6, 6))
+        self.d_d = np.zeros((self.dof, 2 * self.dof))
 
 
 link_deferred = nb.deferred_type()
@@ -88,7 +124,7 @@ link_deferred = nb.deferred_type()
     (
         ("parent", nb.optional(link_deferred)),
         ("properties", _nbLink.class_type.instance_type),
-    )
+    ),
 )
 class nbLink:
     def __init__(

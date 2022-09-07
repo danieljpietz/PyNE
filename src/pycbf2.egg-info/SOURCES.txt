@@ -5,12 +5,12 @@ pyproject.toml
 setup.cfg
 setup.py
 src/pycbf2/NEAlgorithm.py
-src/pycbf2/NEForce.py
-src/pycbf2/NETypes.py
-src/pycbf2/PyNE.py
+src/pycbf2/PyCBF.py
 src/pycbf2/__init__.py
+src/pycbf2/force.py
 src/pycbf2/func.py
-src/pycbf2/utils.py
+src/pycbf2/type.py
+src/pycbf2/util.py
 src/pycbf2.egg-info/PKG-INFO
 src/pycbf2.egg-info/SOURCES.txt
 src/pycbf2.egg-info/dependency_links.txt

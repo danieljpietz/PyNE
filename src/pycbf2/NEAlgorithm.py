@@ -2,12 +2,15 @@ import numpy as np
 from numba import njit, int64, float64, void
 from .type import nbLink, _nbLink
 from .func import block_4x4, skew, axang_rotmat
+from .CBFAlgorithm import differential_kinematics, differential_dynamics
 
 nb_instancetype = nbLink.class_type.instance_type
 _nb_instancetype = _nbLink.class_type.instance_type
 
 
-@njit(void(_nb_instancetype, _nb_instancetype, float64[:], float64[:]))
+@njit(
+    void(_nb_instancetype, _nb_instancetype, float64[:], float64[:]),
+)
 def recursive_kinematics(
     parent: _nbLink, child: _nbLink, gamma: float64[:], dotgamma: float64[:]
 ):
@@ -21,7 +24,7 @@ def recursive_kinematics(
 
     child.rotation_global = parent.rotation_global @ child.rotation_local
 
-    child.angular_velocity = child.IHat @ dotgamma
+    child.angular_velocity_local = child.IHat @ dotgamma
 
     child.linear_velocity = child.ITilde @ dotgamma
 
@@ -36,18 +39,18 @@ def recursive_kinematics(
         (child.IHat, parent.rotation_global @ child.ITilde)
     )
 
-    child.angular_velocity = child.jacobian[0:3] @ dotgamma
+    child.angular_velocity_global = child.jacobian[0:3] @ dotgamma
 
     child.dotJNPrime = block_4x4(
         (
             (
-                -skew(child.angular_velocity) @ child.rotation_local.transpose(),
+                -skew(child.angular_velocity_local) @ child.rotation_local.transpose(),
                 np.zeros((3, 3)),
             ),
             (
                 parent.rotation_global
                 @ (
-                    skew(parent.angular_velocity) @ skew(child.position)
+                    skew(parent.angular_velocity_global) @ skew(child.position)
                     + skew(child.linear_velocity)
                 ),
                 np.zeros((3, 3)),
@@ -61,7 +64,9 @@ def recursive_kinematics(
         + np.concatenate(
             (
                 np.zeros((3, child.dof)),
-                parent.rotation_global @ skew(parent.angular_velocity) @ child.ITilde,
+                parent.rotation_global
+                @ skew(parent.angular_velocity_global)
+                @ child.ITilde,
             )
         )
     )
@@ -85,11 +90,13 @@ def link_dynamics(link: _nbLink, dotgamma: float64):
     d_link_star = np.concatenate(
         (
             np.cross(
-                link.angular_velocity, link.inertia_tensor @ link.angular_velocity
+                link.angular_velocity_global,
+                link.inertia_tensor @ link.angular_velocity_global,
             ),
             link.rotation_global
             @ np.cross(
-                link.angular_velocity, np.cross(link.angular_velocity, link.GAMMA)
+                link.angular_velocity_global,
+                np.cross(link.angular_velocity_global, link.GAMMA),
             ),
         )
     )
@@ -109,11 +116,23 @@ def system_dynamics(
 ):
     H = np.zeros((dof, dof), dtype=float)
     d = np.zeros(dof, dtype=float)
+
+    d_H = np.zeros((dof, dof, dof), dtype=float)
+    d_d = np.zeros((dof, 2 * dof), dtype=float)
+
     for link in system[1:]:
         recursive_kinematics(link.parent.properties, link.properties, gamma, d_gamma)
         link_dynamics(link.properties, d_gamma)
+
         H += link.properties.H
         d += link.properties.d
+
+        differential_kinematics(link.parent.properties, link.properties)
+        differential_dynamics(link.properties, d_gamma)
+
+        d_H += link.properties.d_H
+        d_d += link.properties.d_d
+
     return H, d
 
 
@@ -121,8 +140,5 @@ def system_dynamics(
 def system_forces(dof, n_forces, forces, links):
     F = np.zeros(dof, dtype=float)
     for i in range(n_forces):
-        link = links[i]
-
-        F += forces[i](link.properties)
-
+        F += forces[i](links[i].properties)
     return F

@@ -2,8 +2,10 @@ Metadata-Version: 2.1
 Name: pycbf2
 Version: 0.0.0
 Summary: PyCBF
+Home-page: UNKNOWN
 Author: Daniel Pietz
 License: MIT
+Description: UNKNOWN
 Platform: unix
 Platform: linux
 Platform: cygwin
@@ -11,4 +13,3 @@ Platform: win32
 Classifier: Programming Language :: Python :: 3
 Requires-Python: >=3.8
 Provides-Extra: testing
-License-File: LICENSE

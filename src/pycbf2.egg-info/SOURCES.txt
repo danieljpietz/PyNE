@@ -1,9 +1,9 @@
 LICENSE
-MANIFEST.in
 README.md
 pyproject.toml
 setup.cfg
 setup.py
+src/pycbf2/CBFAlgorithm.py
 src/pycbf2/NEAlgorithm.py
 src/pycbf2/PyCBF.py
 src/pycbf2/__init__.py

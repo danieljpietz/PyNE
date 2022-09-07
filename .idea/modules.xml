@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/../PyCBF/.idea/PyCBF.iml" filepath="$PROJECT_DIR$/../PyCBF/.idea/PyCBF.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/PyCBF.iml" filepath="$PROJECT_DIR$/.idea/PyCBF.iml" />
     </modules>
   </component>
 </project>

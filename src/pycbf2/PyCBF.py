@@ -1,6 +1,7 @@
 import numba
 from .type import nbLink
 from .NEAlgorithm import system_dynamics, system_forces
+
 import numpy as np
 import numba as nb
 import pandas as pd
@@ -14,10 +15,7 @@ def ne_compile(system: nbLink):
 @nb.njit
 def eval(ne_system, x, xdot):
     dof, system, n_forces, forces, forces_map = ne_system
-    (
-        H,
-        d,
-    ) = system_dynamics(dof, system, x, xdot)
+    H, d = system_dynamics(dof, system, x, xdot)
     F = system_forces(dof, n_forces, forces, forces_map)
     return np.concatenate((xdot, np.linalg.solve(H, F - d)))
 
@@ -32,18 +30,6 @@ def step(ne_system, x, xdot, h):
     return (h / 6) * (k1 + 2 * (k2 + k3) + k4)
 
 
-def simulate(ne_system, x, xdot, h, t):
-    dof: numba.int64 = ne_system[0]
-    x = np.reshape(x, dof)
-    xdot = np.reshape(xdot, dof)
-    t, results = _simulate(dof, ne_system, x, xdot, h, t)
-    df = pd.DataFrame(
-        results, columns=[f"{s}{i}" for s in ["x", "xdot"] for i in range(dof)]
-    )
-    df.insert(0, "t", t)
-    return df
-
-
 @nb.njit
 def _simulate(dof, ne_system, x, xdot, h, t):
     tRange = np.arange(t[0], t[1], h)
@@ -54,3 +40,15 @@ def _simulate(dof, ne_system, x, xdot, h, t):
         xdot = result[i - 1, dof:]
         result[i, :] = result[i - 1, :] + step(ne_system, x, xdot, h)
     return tRange, result
+
+
+def simulate(ne_system, x, xdot, h, t):
+    dof: numba.int64 = ne_system[0]
+    x = np.reshape(x, dof)
+    xdot = np.reshape(xdot, dof)
+    t, results = _simulate(dof, ne_system, x, xdot, h, t)
+    df = pd.DataFrame(
+        results, columns=[f"{s}{i}" for s in ["x", "xdot"] for i in range(dof)]
+    )
+    df.insert(0, "t", t)
+    return df

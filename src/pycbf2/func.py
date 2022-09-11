@@ -3,12 +3,12 @@ import numpy as np
 from numba import float64, prange
 
 
-@numba.njit(float64[:, :](float64[:]), cache=True, parallel=True)
+@numba.njit(float64[:, :](float64[:]), fastmath=True, cache=True)
 def skew(v: numba.float64[:]) -> numba.float64[:, :]:
     return np.array(((0, -v[2], v[1]), (v[2], 0, -v[0]), (-v[1], v[0], 0)))
 
 
-@numba.njit(float64[:, :, :](float64[:, :]), cache=True, parallel=True)
+@numba.njit(float64[:, :, :](float64[:, :]), fastmath=True, cache=True, parallel=True)
 def skew3(m: numba.float64[:, :]) -> numba.float64[:, :, :]:
     n_cols = m.shape[1]
     ret: numba.float64[:, :, :] = np.zeros((n_cols, 3, 3), dtype=numba.float64)
@@ -21,8 +21,8 @@ def skew3(m: numba.float64[:, :]) -> numba.float64[:, :, :]:
     float64[:, :](
         numba.types.UniTuple(numba.types.UniTuple(numba.float64[:, :], 2), 2)
     ),
+    fastmath=True,
     cache=True,
-    parallel=True,
 )
 def block_4x4(block: numba.float64[:, :]) -> numba.float64[:, :]:
     return np.concatenate(
@@ -33,7 +33,7 @@ def block_4x4(block: numba.float64[:, :]) -> numba.float64[:, :]:
     )
 
 
-@numba.njit(float64[:, :](float64[:], float64), cache=True, parallel=True)
+@numba.njit(float64[:, :](float64[:], float64), fastmath=True, cache=True)
 def axang_rotmat(axis, angle):
     a = np.cos(angle / 2.0)
     b, c, d = -axis * np.sin(angle / 2.0)
@@ -49,7 +49,9 @@ def axang_rotmat(axis, angle):
 
 
 @numba.njit(
-    numba.float64[:, :](numba.float64[:, :, :], numba.float64[:]), fastmath=True
+    numba.float64[:, :](numba.float64[:, :, :], numba.float64[:]),
+    fastmath=True,
+    cache=True,
 )
 def t_v_p(A, B):
     C = np.zeros((A.shape[1], A.shape[0]))
@@ -59,7 +61,9 @@ def t_v_p(A, B):
 
 
 @numba.njit(
-    numba.float64[:, :, :](numba.float64[:, :, :], numba.float64[:, :]), fastmath=True
+    numba.float64[:, :, :](numba.float64[:, :, :], numba.float64[:, :]),
+    fastmath=True,
+    cache=True,
 )
 def t_m_p(A, B):
     C = np.zeros((A.shape[0], A.shape[1], B.shape[1]))
@@ -69,7 +73,9 @@ def t_m_p(A, B):
 
 
 @numba.njit(
-    numba.float64[:, :, :](numba.float64[:, :], numba.float64[:, :, :]), fastmath=True
+    numba.float64[:, :, :](numba.float64[:, :], numba.float64[:, :, :]),
+    fastmath=True,
+    cache=True,
 )
 def m_t_p(B, A):
     C = np.zeros((A.shape[0], B.shape[0], A.shape[2]))

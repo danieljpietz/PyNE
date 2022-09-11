@@ -172,7 +172,9 @@ class NESystem(object):
             axis=[0, 0, 0],
             index=0,
         )
+
         self.dof = None
+        self.cbf = None
 
     def __init_subclass__(cls, **kwargs):
         __init__old__ = cls.__init__
@@ -208,11 +210,14 @@ class NESystem(object):
             nblink.parent = nbLinks[links.index(link.parent)]
 
         forces = []
+        d_forces = []
         forces_link = []
 
         for i, link in enumerate(links[1:]):
             for force in link.forces:
-                forces.append(force._jit())
+                _force = force._jit()
+                forces.append(_force[0])
+                d_forces.append(_force[1])
                 forces_link.append(nbLinks[i + 1])
 
         return (
@@ -220,7 +225,9 @@ class NESystem(object):
             tuple(nbLinks),
             len(forces),
             tuple(forces),
+            tuple(d_forces),
             tuple(forces_link),
+            self.cbf,
         )
 
 

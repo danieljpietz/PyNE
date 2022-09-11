@@ -6,7 +6,9 @@ setup.py
 src/pycbf2/CBFAlgorithm.py
 src/pycbf2/NEAlgorithm.py
 src/pycbf2/PyCBF.py
+src/pycbf2/QP.py
 src/pycbf2/__init__.py
+src/pycbf2/cbf.py
 src/pycbf2/force.py
 src/pycbf2/func.py
 src/pycbf2/type.py

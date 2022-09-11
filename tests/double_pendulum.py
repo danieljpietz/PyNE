@@ -6,6 +6,8 @@ def test_double_pendulum():
     from pycbf2.force import JointForce, Friction, Gravity, jointforce
     import numpy as np
     from pycbf2.PyCBF import simulate
+    from pycbf2 import cbf
+    import sympy as sym
 
     GOAL = [np.pi / 2, 0]
     SUCCESS_THRESHOLD = 0.01
@@ -41,24 +43,12 @@ def test_double_pendulum():
             for link in self.links():
                 link.add_force(Gravity([0, 0, -9.81]), Friction(0.5))
 
-            self.link1.add_force(PID(GOAL[0]))
-            self.link2.add_force(PID(GOAL[1]))
-
-    class PID(JointForce):
-        def __init__(self, target):
-            super(PID, self).__init__(self.PID_Callback_Factory(target))
-
-        @staticmethod
-        def PID_Callback_Factory(goal):
-            @jointforce
-            def pid(link):
-                return 50 * (goal - link.x) - link.xdot
-
-            return pid
+            t, x, xdot = cbf.cbf_vars(2)
+            self.cbf = cbf.sym_to_cbf(sym.sin(x[0]), t, x, xdot)
 
     s = MySystem().compile()
 
-    df = simulate(s, [0, 0], [0, 0], 0.1, (0, 94))
+    df = simulate(s, [1, 1], [1, 1], 0.1, (0, 30))
 
     error = df.iloc[-1].drop("t") - [GOAL[0], GOAL[1], 0, 0]
 

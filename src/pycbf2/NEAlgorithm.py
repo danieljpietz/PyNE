@@ -10,6 +10,8 @@ _nb_instancetype = _nbLink.class_type.instance_type
 
 @njit(
     void(_nb_instancetype, _nb_instancetype, float64[:], float64[:]),
+    fastmath=True,
+    cache=True,
 )
 def recursive_kinematics(
     parent: _nbLink, child: _nbLink, gamma: float64[:], dotgamma: float64[:]
@@ -72,7 +74,7 @@ def recursive_kinematics(
     )
 
 
-@njit(void(_nb_instancetype, float64[:]))
+@njit(void(_nb_instancetype, float64[:]), fastmath=True, cache=True)
 def link_dynamics(link: _nbLink, dotgamma: float64):
     M_LINK_corner = skew(link.GAMMA) @ link.rotation_global.transpose()
     link.M = block_4x4(
@@ -133,12 +135,14 @@ def system_dynamics(
         d_H += link.properties.d_H
         d_d += link.properties.d_d
 
-    return H, d
+    return H, d, np.concatenate((np.zeros((dof, dof, dof), dtype=float), d_H)), d_d
 
 
-@njit
-def system_forces(dof, n_forces, forces, links):
+# @njit
+def system_forces(dof, n_forces, forces, d_forces, links):
     F = np.zeros(dof, dtype=float)
+    d_F = np.zeros((dof, 2 * dof), dtype=float)
     for i in range(n_forces):
         F += forces[i](links[i].properties)
-    return F
+        d_F += d_forces[i](links[i].properties)
+    return F, d_F

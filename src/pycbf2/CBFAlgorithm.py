@@ -7,7 +7,7 @@ nb_instancetype = nbLink.class_type.instance_type
 _nb_instancetype = _nbLink.class_type.instance_type
 
 
-@njit(void(_nb_instancetype, _nb_instancetype))
+@njit(void(_nb_instancetype, _nb_instancetype), fastmath=True, cache=True)
 def differential_kinematics(parent: _nbLink, child: _nbLink):
 
     dof = child.dof
@@ -141,7 +141,7 @@ def differential_kinematics(parent: _nbLink, child: _nbLink):
     )
 
 
-@njit(void(_nb_instancetype, float64[:]))
+@njit(void(_nb_instancetype, float64[:]), fastmath=True, cache=True)
 def differential_dynamics(link: _nbLink, dotgamma):
 
     dof = link.dof
@@ -196,7 +196,13 @@ def differential_dynamics(link: _nbLink, dotgamma):
     )
 
     d_dPrime1 = (
-        np.concatenate((t_v_p(link.d_angular_velocity_global_skewed, inertia_omega_product), np.zeros((3, dof))), axis=1)
+        np.concatenate(
+            (
+                t_v_p(link.d_angular_velocity_global_skewed, inertia_omega_product),
+                np.zeros((3, dof)),
+            ),
+            axis=1,
+        )
         + skew_omega_global @ d_inertia_omega_product
     )
 
@@ -215,7 +221,7 @@ def differential_dynamics(link: _nbLink, dotgamma):
     dot_jacob_dot_x_product = link.dotJacobian @ dotgamma
     d_dot_jacob_dot_product = t_v_p(link.d_dotJacobian, dotgamma) + (
         link.dotJacobian @ d_dotgamma
-    ) 
+    )
 
     link.d_d = (
         t_v_p(d_jtm, dot_jacob_dot_x_product)

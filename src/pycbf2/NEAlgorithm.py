@@ -138,7 +138,7 @@ def system_dynamics(
     return H, d, np.concatenate((np.zeros((dof, dof, dof), dtype=float), d_H)), d_d
 
 
-# @njit
+@njit
 def system_forces(dof, n_forces, forces, d_forces, links):
     F = np.zeros(dof, dtype=float)
     d_F = np.zeros((dof, 2 * dof), dtype=float)

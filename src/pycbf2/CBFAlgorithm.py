@@ -14,9 +14,6 @@ def differential_kinematics(parent: _nbLink, child: _nbLink):
 
     child.d_rotation_local = t_m_p(skew3(child.IHat), child.rotation_local)
     d_skew_position_local = skew3(child.ITilde)
-    d_velocity_local_skewed = np.concatenate(
-        (np.zeros((dof, 3, 3)), skew3(child.ITilde))
-    )
     d_angular_velocity_local = child.IHat
     d_skew_angular_velocity_local = np.concatenate(
         (np.zeros((dof, 3, 3)), skew3(d_angular_velocity_local))

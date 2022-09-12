@@ -13,7 +13,7 @@ def ne_compile(system: nbLink):
     return system_compiled
 
 
-# @nb.njit
+@nb.njit
 def eval(ne_system, x, xdot):
     dof, system, n_forces, forces, d_forces, forces_map, _cbf = ne_system
     H, d, d_H, d_d = system_dynamics(dof, system, x, xdot)
@@ -25,28 +25,33 @@ def eval(ne_system, x, xdot):
     d_forces = d_F - d_d
 
     xddot = hInv @ forces
+    d_xddot = hInv @ (t_v_p(d_H, xddot) + d_forces)
 
-    f = np.concatenate((xdot, xddot))
-    g = np.concatenate((np.zeros((dof, dof)), hInv))
+    funcs, _input_matrix = _cbf
 
-    sys_jacob_lower = hInv @ (t_v_p(d_H, xdot) + d_forces)
-    sys_jacob_upper = np.concatenate((np.zeros((dof, dof)), np.eye(dof)), axis=1)
-    f_jacob = np.concatenate((sys_jacob_upper, sys_jacob_lower))
-
-    _barrier, _dot_barrier, _gradient, _hessian = _cbf
     X = np.concatenate((x, xdot))
     XD = np.concatenate((X, xddot))
-    cbf = (_barrier(X), _dot_barrier(XD), _gradient(X), _hessian(X))
 
-    sys_packet = (dof, f, f_jacob, g)
-    forces_with_control = forces + cbf_eval(
-        sys_packet, cbf, 0, -1000 * np.ones(dof), 1000 * np.ones(dof)
+    _barrier, _dot_barrier, _gradient, _hessian, = funcs
+    cbf = (_barrier[0](X), _dot_barrier[0](XD), _gradient[0](X), _hessian[0](X))
+
+    f = np.concatenate((xdot, xddot))
+    g = np.concatenate((np.zeros((dof, dof)), hInv @ _input_matrix))
+
+    d_f = np.concatenate((np.concatenate((np.zeros((dof, dof)), np.eye(dof)), axis=1), d_xddot))
+
+    sys_packet = (dof, f, d_f, g)
+
+    cbf_forces = cbf_eval(
+        sys_packet, cbf, np.zeros_like(x), -10000 * np.ones(dof), 10000 * np.ones(dof)
     )
+
+    forces_with_control = forces + cbf_forces
 
     return np.concatenate((xdot, np.linalg.solve(H, forces_with_control)))
 
 
-# @nb.njit
+@nb.njit
 def step(ne_system, x, xdot, h):
     dof = ne_system[0]
     k1 = eval(ne_system, x, xdot)
@@ -56,7 +61,7 @@ def step(ne_system, x, xdot, h):
     return (h / 6) * (k1 + 2 * (k2 + k3) + k4)
 
 
-# @nb.njit
+@nb.njit
 def _simulate(dof, ne_system, x, xdot, h, t):
     tRange = np.arange(t[0], t[1], h)
     result = np.zeros((len(tRange), 2 * dof))

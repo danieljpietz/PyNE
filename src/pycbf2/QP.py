@@ -2,6 +2,7 @@ from cffi import FFI
 import numba as nb
 import numpy as np
 import pkg_resources as pkg
+import glob
 
 _ffi = FFI()
 
@@ -16,7 +17,9 @@ _ffi.cdef(
     " size_t n_constraints);"
 )
 
-lib = _ffi.dlopen(pkg.resource_filename(__name__, "lib/libQP.dylib"))
+path = pkg.resource_filename(__name__, "")
+_libpath = glob.glob(f"{path}/lib/libQP/cmake-build-release/libQP.*")[0]
+lib = _ffi.dlopen(_libpath)
 
 _qpsolve = lib.qp_solve
 

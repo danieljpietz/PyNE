@@ -5,7 +5,7 @@ from .func import *
 from .QP import qpsolve
 
 
-def sym_to_cbf(fun, t, x, xdot):
+def compile_symbolic(fun, t, x, xdot):
     fun = sym.core.add.Add(fun)
     args = list(x) + list(xdot)
     nb_args = nb.float64(*(len(args) * (nb.float64,)))
@@ -17,9 +17,7 @@ def sym_to_cbf(fun, t, x, xdot):
     )
     args_func_obj = [f(t) for f in args_func_symbols]
 
-    dotf_args = list(xdot) + list(
-        (sym.var(" ".join([f"xddot{i}" for i in range(len(x))])),)
-    )
+    dotf_args = list(xdot) + [sym.var(f"xddot{i}") for i in range(len(x))]
     f_subbed = fun.subs(zip(args, args_func_obj))
     d_f_subbed = f_subbed.diff(t)
 
@@ -65,14 +63,14 @@ def sym_to_cbf(fun, t, x, xdot):
 
     @nb.njit(nb.float64(nb.float64[:]))
     def _cbf_compiled(X):
-        return f_njit(*_ar_to_tuple(X))
+        return ((f_njit(*_ar_to_tuple(X))))
 
     dof3 = len(dotf_args_full)
     _d_ar_to_tuple = _numba_nparray_to_tuple(dof3)
 
     @nb.njit(nb.float64(nb.float64[:]))
     def _dot_cbf_compiled(X):
-        return dotf_njit(*_d_ar_to_tuple(X))
+        return ((dotf_njit(*_d_ar_to_tuple(X))))
 
     @nb.njit(nb.float64[:](nb.float64[:]))
     def _grad_compiled(X):
@@ -92,7 +90,7 @@ def sym_to_cbf(fun, t, x, xdot):
                 _h[j, i] = _h[i][j]
         return _h
 
-    return _cbf_compiled, _dot_cbf_compiled, _grad_compiled, _hessian_compiled
+    return (_cbf_compiled,), (_dot_cbf_compiled,), (_grad_compiled,), (_hessian_compiled,)
 
 
 def cbf_vars(dof):
@@ -102,7 +100,7 @@ def cbf_vars(dof):
         sym.Matrix((sym.var(" ".join([f"xdot{i}" for i in range(dof)])),)),
     )
 
-
+@nb.njit(fastmath=True, cache=True)
 def cbf_eval(syspacket, cbf, uref, umin, umax):
     barrier, dot_barrier, gradient, hessian = cbf
     (
@@ -121,11 +119,10 @@ def cbf_eval(syspacket, cbf, uref, umin, umax):
     A = np.concatenate((A, np.eye(dof)))
     A = np.concatenate((A, -np.eye(dof)))
 
-    b = (lhs_mult + gradient) @ f + c1 * barrier + c2 * dot_barrier
-    b = np.reshape(b, 1)
+    b = np.array((((lhs_mult + gradient) @ f + c1 * barrier + c2 * dot_barrier),))
     b = np.concatenate((b, umax))
     b = np.concatenate((b, -umin))
     H = np.eye(dof)  # Cost matrix
     f_ = -H @ (uref)
 
-    return qpsolve(H, f_, A, -2 * abs(b) - 1, b)
+    return qpsolve(H, f_, A, -np.abs(b) - 1, b)

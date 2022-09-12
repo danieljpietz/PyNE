@@ -2,5 +2,7 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/src/pycbf2/lib/libQP/cmake-build-release/OSQPDownloader-prefix/src/OSQPDownloader" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/src/pycbf2/lib/libQP/cmake-build-release/OSQPDownloader-prefix/src/OSQPDownloader/lin_sys/direct/qdldl/qdldl_sources" vcs="Git" />
   </component>
 </project>

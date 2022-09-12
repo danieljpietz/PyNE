@@ -44,7 +44,7 @@ def test_double_pendulum():
                 link.add_force(Gravity([0, 0, -9.81]), Friction(0.5))
 
             t, x, xdot = cbf.cbf_vars(2)
-            self.cbf = cbf.sym_to_cbf(sym.sin(x[0]), t, x, xdot)
+            self.cbf = cbf.compile_symbolic(sym.sin(x[0]), t, x, xdot)
 
     s = MySystem().compile()
 

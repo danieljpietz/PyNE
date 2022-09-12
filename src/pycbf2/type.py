@@ -174,7 +174,8 @@ class NESystem(object):
         )
 
         self.dof = None
-        self.cbf = None
+        self.cbf = 1
+        self.input_matrix = None
 
     def __init_subclass__(cls, **kwargs):
         __init__old__ = cls.__init__
@@ -186,10 +187,18 @@ class NESystem(object):
 
         cls.__init__ = __init_wrapper__
 
+    def cbf_vars(self):
+        from .cbf import cbf_vars
+        return cbf_vars(self.get_dof())
+
     def _post_init(self):
         self.__root.dof = self.get_dof()
         self.__root._assign_dof_branch()
         self.dof = self.__root.dof
+        if self.input_matrix is None:
+            self.input_matrix = np.eye(self.dof, dtype=float)
+        else:
+            self.input_matrix = np.reshape(self.input_matrix, (self.dof, self.dof)).astype(float)
 
     def _add_child(self, child):
         return self.__root._add_child(child)
@@ -204,6 +213,7 @@ class NESystem(object):
         return tuple(self.get_links_flattened()[1:])
 
     def compile(self):
+        from .cbf import compile_symbolic
         links = self.get_links_flattened()
         nbLinks = [link._jit() for link in links]
         for nblink, link in zip(nbLinks[1:], links[1:]):
@@ -227,7 +237,7 @@ class NESystem(object):
             tuple(forces),
             tuple(d_forces),
             tuple(forces_link),
-            self.cbf,
+            (compile_symbolic(self.cbf, *self.cbf_vars()), np.array(self.input_matrix)),
         )
 
 

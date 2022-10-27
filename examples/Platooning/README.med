@@ -1,0 +1,15 @@
+This example contains 4 platooning vehicles with a desired velocity of 10 and a separation time of 1 second
+
+
+Without CBF
+
+| Position | Velocities | 
+| --------| ----------- |
+|||
+
+
+With CBF
+
+| Position | Velocities | 
+| --------| ----------- |
+|||

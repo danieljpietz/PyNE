@@ -155,7 +155,6 @@ class Arm(pycbf2.NESystem):
                     # self.cbf *= (end_effector_position[2] - 0.5)
 
                 self.cbf = end_effector_position[2] - 0.5
-                self.cbf = 1
                 self.clf = 0
                 self.t = 0
 

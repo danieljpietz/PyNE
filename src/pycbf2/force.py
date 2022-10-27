@@ -1,29 +1,27 @@
-import numba as nb
 import numpy as np
 from .func import skew, m_t_p, t_m_p, t_v_p
 from .type import _nbLink
 
-force_function_spec = nb.float64[:](_nbLink.class_type.instance_type)
-d_force_function_spec = nb.float64[:, :](_nbLink.class_type.instance_type)
-
-joint_force_function_spec = nb.float64(_nbLink.class_type.instance_type)
-d_joint_force_function_spec = nb.float64[:](_nbLink.class_type.instance_type)
-
 
 def neforce(func):
-    return nb.njit(force_function_spec, cache=True)(func)
+    return (func)
 
 
 def d_neforce(func):
-    return nb.njit(d_force_function_spec, cache=True)(func)
+    return (func)
 
 
 def jointforce(func):
-    return nb.njit(joint_force_function_spec, cache=True)(func)
+    return (func)
 
 
 def d_jointforce(func):
-    return nb.njit(d_joint_force_function_spec, cache=True)(func)
+    return (func)
+
+
+
+def my_decorator(func):
+    return func
 
 
 class Force:
@@ -81,7 +79,7 @@ class Friction(JointForce):
         @d_jointforce
         def _d_friction_callback(link):
             re = np.zeros(2 * link.dof)
-            re[2 * link.index] = -coeff
+            re[link.index + link.dof] = -coeff
             return re
 
         return _d_friction_callback
@@ -112,12 +110,12 @@ class Gravity(Force):
         )
 
     @staticmethod
-    def _grav_cb_factory(vec: nb.float64[:]):
+    def _grav_cb_factory(vec):
         @neforce
         def _grav_callback(link: _nbLink):
             return link.jacobian.transpose() @ np.concatenate(
                 (
-                    skew(link.COM) @ link.rotation_global.transpose() @ vec,
+                    skew(link.GAMMA) @ link.rotation_global.transpose() @ vec,
                     link.mass * vec,
                 )
             )
@@ -125,7 +123,7 @@ class Gravity(Force):
         return _grav_callback
 
     @staticmethod
-    def _d_grav_cb_factory(_vec: nb.float64):
+    def _d_grav_cb_factory(_vec):
         @d_neforce
         def _d_grav_callback(link: _nbLink):
 
@@ -136,14 +134,14 @@ class Gravity(Force):
 
             temp = np.concatenate(
                 (
-                    skew(link.COM) @ link.rotation_global.transpose() @ vec,
+                    skew(link.GAMMA) @ link.rotation_global.transpose() @ vec,
                     link.mass * vec,
                 )
             )
 
             d_temp = np.concatenate(
                 (
-                    skew(link.COM)
+                    skew(link.GAMMA)
                     @ t_v_p(link.d_rotation_global.transpose(0, 2, 1), vec),
                     np.zeros((3, link.dof)),
                 )
@@ -154,6 +152,6 @@ class Gravity(Force):
                 + link.jacobian.T @ d_temp
             )
 
-            return np.concatenate((res, np.zeros((link.dof, link.dof))), axis=1)
+            return -np.concatenate((res, np.zeros((link.dof, link.dof))), axis=1)
 
         return _d_grav_callback

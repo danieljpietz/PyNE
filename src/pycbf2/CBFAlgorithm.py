@@ -1,13 +1,6 @@
-import numpy as np
-from numba import njit, int64, float64, void, prange
-from .type import nbLink, _nbLink
+from .type import _nbLink
 from .func import *
 
-nb_instancetype = nbLink.class_type.instance_type
-_nb_instancetype = _nbLink.class_type.instance_type
-
-
-@njit(void(_nb_instancetype, _nb_instancetype), fastmath=True, cache=True)
 def differential_kinematics(parent: _nbLink, child: _nbLink):
 
     dof = child.dof
@@ -138,7 +131,7 @@ def differential_kinematics(parent: _nbLink, child: _nbLink):
     )
 
 
-@njit(void(_nb_instancetype, float64[:]), fastmath=True, cache=True)
+#@nb.njit(void(_nb_instancetype, float64[:]), fastmath=True, cache=True)
 def differential_dynamics(link: _nbLink, dotgamma):
 
     dof = link.dof

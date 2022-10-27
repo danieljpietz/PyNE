@@ -5,7 +5,16 @@ from .func import *
 from .QP import qpsolve
 
 
+def _numba_nparray_to_tuple(len):
+    fun_str = f"nb.njit() \ndef __ar_to_tuple(array): \n\ttup = {', '.join([f'array[{i}]' for i in range(len)])} \n\treturn tup"
+    d = {"nb": nb}
+    exec(fun_str, d)
+    _nj = nb.njit(d["__ar_to_tuple"])
+    return _nj
+
+
 def compile_symbolic(fun, t, x, xdot):
+
     fun = sym.core.add.Add(fun)
     args = list(x) + list(xdot)
     nb_args = nb.float64(*(len(args) * (nb.float64,)))
@@ -51,39 +60,32 @@ def compile_symbolic(fun, t, x, xdot):
 
     h_njit = tuple(h_njit)
 
-    def _numba_nparray_to_tuple(len):
-        fun_str = f"nb.njit() \ndef __ar_to_tuple(array): \n\ttup = {', '.join([f'array[{i}]' for i in range(len)])} \n\treturn tup"
-        d = {"nb": nb}
-        exec(fun_str, d)
-        _nj = nb.njit(d["__ar_to_tuple"])
-        return _nj
-
     dof2 = len(args)
     _ar_to_tuple = _numba_nparray_to_tuple(dof2)
 
-    @nb.njit(nb.float64(nb.float64[:]))
+
     def _cbf_compiled(X):
         return ((f_njit(*_ar_to_tuple(X))))
 
     dof3 = len(dotf_args_full)
     _d_ar_to_tuple = _numba_nparray_to_tuple(dof3)
 
-    @nb.njit(nb.float64(nb.float64[:]))
+
     def _dot_cbf_compiled(X):
         return ((dotf_njit(*_d_ar_to_tuple(X))))
 
-    @nb.njit(nb.float64[:](nb.float64[:]))
+
     def _grad_compiled(X):
         _tup = _ar_to_tuple(X)
-        _g = np.zeros(dof2, dtype=nb.float64)
+        _g = np.zeros(dof2, dtype=float)
         for i in range(dof2):
             _g[i] = g_njit[i](*_tup)
         return _g
 
-    @nb.njit(nb.float64[:, :](nb.float64[:]))
+
     def _hessian_compiled(X):
         _tup = _ar_to_tuple(X)
-        _h = np.zeros((dof2, dof2), dtype=nb.float64)
+        _h = np.zeros((dof2, dof2), dtype=float)
         for i in range(dof2):
             for j in range(i + 1):
                 _h[i, j] = h_njit[i][j](*_tup)
@@ -93,6 +95,25 @@ def compile_symbolic(fun, t, x, xdot):
     return (_cbf_compiled,), (_dot_cbf_compiled,), (_grad_compiled,), (_hessian_compiled,)
 
 
+def uref_compile(fun, t, x, xdot):
+    args = list(x) + list(xdot)
+    nb_args = nb.float64[:](*(len(args) * (nb.float64,)))
+    fun = fun.flatten()
+    vec = [sym.lambdify(args, func, "numpy") for func in fun]
+
+    lambd = lambda *args: np.array([func(*args) for func in vec])
+
+    _urefs_ar_tuple = _numba_nparray_to_tuple(len(args))
+
+    dof = len(x)
+
+    def _uref_func(X):
+        _tup = _urefs_ar_tuple(X)
+        return lambd(*_tup)
+
+    return _uref_func,
+
+
 def cbf_vars(dof):
     return (
         sym.var("t"),
@@ -100,9 +121,13 @@ def cbf_vars(dof):
         sym.Matrix((sym.var(" ".join([f"xdot{i}" for i in range(dof)])),)),
     )
 
-@nb.njit(fastmath=True, cache=True)
-def cbf_eval(syspacket, cbf, uref, umin, umax):
-    barrier, dot_barrier, gradient, hessian = cbf
+
+
+def cbf_eval(syspacket, cbf, clf, uref, umin, umax):
+
+    barrier, dot_barrier, barrier_gradient, barrier_hessian = cbf
+    lyaponov, dot_lyaponov, lyaponov_gradient, lyaponov_hessian = clf
+
     (
         dof,
         f,
@@ -110,19 +135,54 @@ def cbf_eval(syspacket, cbf, uref, umin, umax):
         g,
     ) = syspacket
 
-    c1, c2 = 1, 1
+    ulen = len(uref)
 
-    lhs_mult = hessian @ f + j_f.T @ gradient
+    #B1, B2 = 5, 5 # 7DOF
+    B1, B2 = 5, 2 # Drone
+    L1, L2 = 1, 1
 
-    A = lhs_mult @ (-g)
-    A = np.reshape(A, (1, dof))
-    A = np.concatenate((A, np.eye(dof)))
-    A = np.concatenate((A, -np.eye(dof)))
+    lhs_mult_cbf = barrier_hessian @ f + barrier_gradient @ j_f
+    lhs_mult_clf = lyaponov_hessian @ f + lyaponov_gradient @ j_f
 
-    b = np.array((((lhs_mult + gradient) @ f + c1 * barrier + c2 * dot_barrier),))
-    b = np.concatenate((b, umax))
-    b = np.concatenate((b, -umin))
-    H = np.eye(dof)  # Cost matrix
-    f_ = -H @ (uref)
+    A = np.zeros((2, ulen + 1))
+    A[0,:ulen] = (barrier_gradient + lhs_mult_cbf) @ (-g)
+    A[1,:ulen] = (lyaponov_gradient + lhs_mult_clf) @ g
+    A[1, ulen] = -1
+    b = np.zeros((2))
 
-    return qpsolve(H, f_, A, -np.abs(b) - 1, b)
+    b[0] = ((lhs_mult_cbf + barrier_gradient) @ f + B1 * barrier + B2 * dot_barrier)
+    b[1] = -((lhs_mult_clf + lyaponov_gradient) @ (f) + L1 * lyaponov + L2 * dot_lyaponov)
+
+    if umax is not None:
+        A = np.concatenate((A, np.eye(dof)))
+        b = np.concatenate((b, umax))
+
+    if umin is not None:
+        A = np.concatenate((A, -np.eye(dof)))
+        b = np.concatenate((b, -umin))
+
+
+
+    H = np.eye(ulen + 1) # Cost matrix
+    H[ulen, ulen] = 1
+    f_ = -H @ (np.concatenate((uref, np.array([0]))))
+    u = qpsolve(H, f_, A, -np.abs(b) - 1.25, b)
+
+    return u[:ulen]
+
+
+class ControlFunc:
+    def __init__(self, cbf=1, clf=0):
+        self._vars = vars
+        self.cbf = cbf
+        self.clf = clf
+
+    def uref(self, x, xdot):
+        return np.zeros(self.input_matrix(x, xdot).shape[1])
+
+    def input_matrix(self, x, xdot):
+        return np.eye(len(self._vars[1]))
+
+    def _jit(self):
+        return compile_symbolic(self.cbf, *self._vars), compile_symbolic(self.clf, *self._vars), self.uref, self.input_matrix, #return compile_symbolic(self.cbf, *self._vars), compile_symbolic(self.clf, *self._vars), , np.array(self.input_matrix), #
+

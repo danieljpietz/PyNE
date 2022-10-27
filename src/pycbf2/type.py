@@ -1,55 +1,9 @@
 from __future__ import annotations
-import numba as nb
 import numpy as np
 import enum
 from typing import Union
 from .func import skew, skew3
 
-_nbLinkSpec = (
-    ("link_type", nb.int64),
-    ("dof", nb.int64),
-    ("index", nb.int64),
-    ("axis", nb.float64[:]),
-    ("x", nb.float64),
-    ("xdot", nb.float64),
-    ("mass", nb.float64),
-    ("COM", nb.float64[:]),
-    ("GAMMA", nb.float64[:]),
-    ("inertia_tensor", nb.float64[:, :]),
-    ("IHat", nb.float64[:, :]),
-    ("ITilde", nb.float64[:, :]),
-    ("rotation_local", nb.float64[:, :]),
-    ("rotation_offset", nb.float64[:, :]),
-    ("rotation_global", nb.float64[:, :]),
-    ("angular_velocity_local", nb.float64[:]),
-    ("angular_velocity_global", nb.float64[:]),
-    ("position", nb.float64[:]),
-    ("position_local_skewed", nb.float64[:, :]),
-    ("linear_velocity", nb.float64[:]),
-    ("jacobian", nb.float64[:, :]),
-    ("JNPrime", nb.float64[:, :]),
-    ("dotJNPrime", nb.float64[:, :]),
-    ("dotJacobian", nb.float64[:, :]),
-    ("H", nb.float64[:, :]),
-    ("M", nb.float64[:, :]),
-    ("d", nb.float64[:]),
-    ("F", nb.float64[:]),
-    ("d_rotation_local", nb.float64[:, :, :]),
-    ("d_skew_position_local", nb.float64[:, :, :]),
-    ("d_rotation_global", nb.float64[:, :, :]),
-    ("d_angular_velocity_global", nb.float64[:, :]),
-    ("d_angular_velocity_global_skewed", nb.float64[:, :, :]),
-    ("d_jacobian", nb.float64[:, :, :]),
-    ("d_JNPrime", nb.float64[:, :, :]),
-    ("d_dotJNPrime", nb.float64[:, :, :]),
-    ("d_dotJacobian", nb.float64[:, :, :]),
-    ("d_H", nb.float64[:, :, :]),
-    ("d_M", nb.float64[:, :, :]),
-    ("d_d", nb.float64[:, :]),
-)
-
-
-@nb.experimental.jitclass(_nbLinkSpec)
 class _nbLink:
     def __init__(
         self,
@@ -71,6 +25,8 @@ class _nbLink:
         self.axis = axis
         self.x = 0
         self.xdot = 0
+        self.gamma = 0
+        self.dotgamma = 0
         self.mass = mass
         self.GAMMA = GAMMA
         self.COM = mass * GAMMA
@@ -117,15 +73,6 @@ class _nbLink:
         self.d_d = np.zeros((self.dof, 2 * self.dof))
 
 
-link_deferred = nb.deferred_type()
-
-
-@nb.experimental.jitclass(
-    (
-        ("parent", nb.optional(link_deferred)),
-        ("properties", _nbLink.class_type.instance_type),
-    ),
-)
 class nbLink:
     def __init__(
         self,
@@ -157,10 +104,6 @@ class nbLink:
             ITilde,
         )
 
-
-link_deferred.define(nbLink.class_type.instance_type)
-
-
 class NESystem(object):
     def __init__(self):
         self.__root = Link(
@@ -173,32 +116,38 @@ class NESystem(object):
             index=0,
         )
 
-        self.dof = None
-        self.cbf = 1
-        self.input_matrix = None
+        from .cbf import ControlFunc
+        
+        class DefaultController(ControlFunc):
+            def __init__(self):
+                super(DefaultController, self).__init__()
 
-    def __init_subclass__(cls, **kwargs):
+        self.dof = None
+        self.controller = DefaultController()
+        self._cbf_vars = None
+
+
+    def __init_subclass__(cls, *args, **kwargs):
         __init__old__ = cls.__init__
 
-        def __init_wrapper__(instance):
+        def __init_wrapper__(instance, *args):
             cls.__init__ = __init__old__
-            instance.__init__()
+            instance.__init__(*args)
             instance._post_init()
 
         cls.__init__ = __init_wrapper__
 
     def cbf_vars(self):
         from .cbf import cbf_vars
-        return cbf_vars(self.get_dof())
+        if self._cbf_vars is None:
+            self._cbf_vars = cbf_vars(self.get_dof())
+        return self._cbf_vars
 
     def _post_init(self):
         self.__root.dof = self.get_dof()
         self.__root._assign_dof_branch()
         self.dof = self.__root.dof
-        if self.input_matrix is None:
-            self.input_matrix = np.eye(self.dof, dtype=float)
-        else:
-            self.input_matrix = np.reshape(self.input_matrix, (self.dof, self.dof)).astype(float)
+        self.controller._vars = self._cbf_vars
 
     def _add_child(self, child):
         return self.__root._add_child(child)
@@ -213,7 +162,6 @@ class NESystem(object):
         return tuple(self.get_links_flattened()[1:])
 
     def compile(self):
-        from .cbf import compile_symbolic
         links = self.get_links_flattened()
         nbLinks = [link._jit() for link in links]
         for nblink, link in zip(nbLinks[1:], links[1:]):
@@ -230,6 +178,9 @@ class NESystem(object):
                 d_forces.append(_force[1])
                 forces_link.append(nbLinks[i + 1])
 
+        if self.controller._vars is None:
+            self.controller._vars = self.cbf_vars()
+
         return (
             int(self.dof),
             tuple(nbLinks),
@@ -237,7 +188,7 @@ class NESystem(object):
             tuple(forces),
             tuple(d_forces),
             tuple(forces_link),
-            (compile_symbolic(self.cbf, *self.cbf_vars()), np.array(self.input_matrix)),
+            self.controller._jit(),
         )
 
 
@@ -287,7 +238,7 @@ class Link:
         if self.link_type == LinkType.rotational:
             self.IHat[:, self.index] = self.axis
         elif self.link_type == LinkType.prismatic:
-            self.IHat[:, self.index] = self.axis
+            self.ITilde[:, self.index] = self.axis
 
     def _assign_dof_branch(self):
         self._assign_dof()

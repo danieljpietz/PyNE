@@ -1,21 +1,15 @@
 import numpy as np
-from numba import njit, int64, float64, void
-from .type import nbLink, _nbLink
+from .type import _nbLink
 from .func import block_4x4, skew, axang_rotmat
 from .CBFAlgorithm import differential_kinematics, differential_dynamics
 
-nb_instancetype = nbLink.class_type.instance_type
-_nb_instancetype = _nbLink.class_type.instance_type
 
-
-@njit(
-    void(_nb_instancetype, _nb_instancetype, float64[:], float64[:]),
-    fastmath=True,
-    cache=True,
-)
 def recursive_kinematics(
-    parent: _nbLink, child: _nbLink, gamma: float64[:], dotgamma: float64[:]
+    parent: _nbLink, child: _nbLink, gamma, dotgamma
 ):
+    child.gamma = gamma
+    child.dotgamma = dotgamma
+
     child.x = gamma[child.index]
     child.xdot = dotgamma[child.index]
 
@@ -50,7 +44,7 @@ def recursive_kinematics(
                 np.zeros((3, 3)),
             ),
             (
-                parent.rotation_global
+                -parent.rotation_global
                 @ (
                     skew(parent.angular_velocity_global) @ skew(child.position)
                     + skew(child.linear_velocity)
@@ -74,8 +68,8 @@ def recursive_kinematics(
     )
 
 
-@njit(void(_nb_instancetype, float64[:]), fastmath=True, cache=True)
-def link_dynamics(link: _nbLink, dotgamma: float64):
+
+def link_dynamics(link: _nbLink, dotgamma):
     M_LINK_corner = skew(link.GAMMA) @ link.rotation_global.transpose()
     link.M = block_4x4(
         (
@@ -104,14 +98,13 @@ def link_dynamics(link: _nbLink, dotgamma: float64):
     )
 
     link.d = (
-        link.jacobian.transpose() @ link.M @ link.dotJacobian @ dotgamma
-        + link.jacobian.transpose() @ d_link_star
+        link.jacobian.transpose() @ (link.M @ link.dotJacobian @ dotgamma
+        + d_link_star)
     )
 
 
-@njit
 def system_dynamics(
-    dof: int64,
+    dof,
     system,
     gamma,
     d_gamma,
@@ -135,10 +128,9 @@ def system_dynamics(
         d_H += link.properties.d_H
         d_d += link.properties.d_d
 
-    return H, d, np.concatenate((np.zeros((dof, dof, dof), dtype=float), d_H)), d_d
+    return H, d, np.concatenate((d_H, np.zeros((dof, dof, dof), dtype=float))), d_d
 
 
-@njit
 def system_forces(dof, n_forces, forces, d_forces, links):
     F = np.zeros(dof, dtype=float)
     d_F = np.zeros((dof, 2 * dof), dtype=float)

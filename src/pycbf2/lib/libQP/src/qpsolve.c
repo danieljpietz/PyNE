@@ -1,4 +1,4 @@
-#include <osqp/osqp.h>
+#include "osqp/osqp.h"
 #include <math.h>
 
 c_int to_sparse(double* M, size_t M_rows, size_t M_cols, c_float** _P_x, c_int** _P_i, c_int** _P_p, char ut) {

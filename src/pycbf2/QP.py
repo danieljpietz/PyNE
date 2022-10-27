@@ -1,5 +1,4 @@
 from cffi import FFI
-import numba as nb
 import numpy as np
 import pkg_resources as pkg
 import glob
@@ -24,7 +23,6 @@ lib = _ffi.dlopen(_libpath)
 _qpsolve = lib.qp_solve
 
 
-@nb.njit
 def qpsolve(H, f, A, lb, ub):
 
     solution = np.empty_like(f)

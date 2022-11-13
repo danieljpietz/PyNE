@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Pietz"
+  given-names: "Daniel"
+title: "PyNE"
+version: 0.2.20
+date-released: 2022-11-12
+url: "https://github.com/danieljpietz/PyNE"
